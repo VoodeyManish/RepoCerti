@@ -2,21 +2,22 @@ import React, { useState } from 'react';
 import { Header, NavButton } from './Header';
 import { ReportGenerator } from './ReportGenerator';
 import { BulkCertificateVerifier } from './BulkCertificateVerifier';
-import { StaffModule } from '../types';
+import { StaffModule, User } from '../types';
 
 interface StaffDashboardProps {
   onLogout: () => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  user: User;
 }
 
-export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, isDarkMode, toggleDarkMode }) => {
+export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, isDarkMode, toggleDarkMode, user }) => {
   const [activeModule, setActiveModule] = useState<StaffModule>(StaffModule.BulkVerify);
 
   return (
     <>
       <Header 
-        userRole="staff"
+        user={user}
         onLogout={onLogout}
         isDarkMode={isDarkMode}
         toggleDarkMode={toggleDarkMode}

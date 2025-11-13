@@ -1,16 +1,13 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { extractCertificateInfo } from '../services/geminiService';
 import { CertificateData } from '../types';
 import { UploadIcon, DownloadIcon, SparklesIcon } from './icons';
 
-const initialCertificateData: CertificateData = {
-    recipientName: '',
-    certificateId: '',
-    courseTitle: '',
-    issuingAuthority: '',
-    issueDate: '',
-};
+// Local type for items in the export list, extending the base data with file info for the modal.
+interface CertificateExportItem extends CertificateData {
+    mimeType: string;
+}
 
 export const CertificateExtractor: React.FC = () => {
     const [file, setFile] = useState<File | null>(null);
@@ -18,19 +15,35 @@ export const CertificateExtractor: React.FC = () => {
     const [extractedData, setExtractedData] = useState<CertificateData | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [allCertificates, setAllCertificates] = useState<CertificateData[]>([]);
+    const [allCertificates, setAllCertificates] = useState<CertificateExportItem[]>([]);
+    const [isAddingToList, setIsAddingToList] = useState<boolean>(false);
+    const [selectedCertificate, setSelectedCertificate] = useState<CertificateExportItem | null>(null);
+
+
+    useEffect(() => {
+        return () => {
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
+    }, [previewUrl]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
+        
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
+
         if (selectedFile) {
             setFile(selectedFile);
             setExtractedData(null);
             setError(null);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPreviewUrl(reader.result as string);
-            };
-            reader.readAsDataURL(selectedFile);
+            const objectUrl = URL.createObjectURL(selectedFile);
+            setPreviewUrl(objectUrl);
+        } else {
+            setFile(null);
+            setPreviewUrl(null);
         }
     };
 
@@ -62,13 +75,36 @@ export const CertificateExtractor: React.FC = () => {
         }
     };
 
-    const addToList = () => {
-        if (extractedData && previewUrl) {
-            const base64String = previewUrl.split(',')[1];
-            setAllCertificates([...allCertificates, { ...extractedData, imageBase64: base64String }]);
-            setExtractedData(null);
-            setFile(null);
-            setPreviewUrl(null);
+    const fileToDataUrl = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+        });
+    };
+
+    const addToList = async () => {
+        if (extractedData && file) {
+            setIsAddingToList(true);
+            try {
+                const dataUrl = await fileToDataUrl(file);
+                // Add mimeType for the modal viewer functionality
+                setAllCertificates(prev => [...prev, { ...extractedData, imageBase64: dataUrl, mimeType: file.type }]);
+                
+                setExtractedData(null);
+                setFile(null);
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl);
+                }
+                setPreviewUrl(null);
+
+            } catch (err) {
+                setError('Could not process file for the export list.');
+                console.error(err);
+            } finally {
+                setIsAddingToList(false);
+            }
         }
     };
 
@@ -90,7 +126,8 @@ export const CertificateExtractor: React.FC = () => {
         `;
 
         allCertificates.forEach(cert => {
-            const imageTag = cert.imageBase64 ? `<img src="data:image/png;base64,${cert.imageBase64}" width="200" alt="Certificate">` : '';
+            const buttonStyle = "text-decoration: none; display: inline-block; padding: 5px 10px; background-color: #0d9488; color: #ffffff; border-radius: 4px; font-family: sans-serif; text-align: center;";
+            const imageLink = cert.imageBase64 ? `<a href="${cert.imageBase64}" style="${buttonStyle}">View Image</a>` : 'N/A';
             tableHtml += `
                 <tr>
                     <td>${cert.recipientName}</td>
@@ -98,7 +135,7 @@ export const CertificateExtractor: React.FC = () => {
                     <td>${cert.courseTitle}</td>
                     <td>${cert.issuingAuthority}</td>
                     <td>${cert.issueDate}</td>
-                    <td>${imageTag}</td>
+                    <td>${imageLink}</td>
                 </tr>
             `;
         });
@@ -115,7 +152,12 @@ export const CertificateExtractor: React.FC = () => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
+    };
+
+    const closeCertificateModal = () => {
+        setSelectedCertificate(null);
     };
 
     return (
@@ -132,10 +174,18 @@ export const CertificateExtractor: React.FC = () => {
                             </p>
                         </label>
                     </div>
-                    {previewUrl && (
+                    {previewUrl && file && (
                         <div className="mt-4">
                             <h3 className="font-semibold">Preview:</h3>
-                            <img src={previewUrl} alt="Certificate Preview" className="mt-2 rounded-lg shadow-md max-h-80 w-auto mx-auto" />
+                            {file.type.startsWith('image/') ? (
+                                <img src={previewUrl} alt="Certificate Preview" className="mt-2 rounded-lg shadow-md max-h-96 w-auto mx-auto" />
+                            ) : file.type === 'application/pdf' ? (
+                                <iframe src={previewUrl} title="Certificate Preview" className="mt-2 w-full h-96 rounded-lg shadow-md border-0" />
+                            ) : (
+                                <div className="mt-2 text-center p-4 rounded-lg bg-gray-100 dark:bg-secondary-light text-gray-500 dark:text-gray-400">
+                                    <p>Preview not available for this file type ({file.type}).</p>
+                                </div>
+                            )}
                         </div>
                     )}
                     <button
@@ -167,7 +217,9 @@ export const CertificateExtractor: React.FC = () => {
                                     />
                                 </div>
                             ))}
-                            <button onClick={addToList} className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg">Add to Export List</button>
+                            <button onClick={addToList} disabled={isAddingToList} className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                {isAddingToList ? 'Adding...' : 'Add to Export List'}
+                            </button>
                         </div>
                     ) : (
                         <div className="flex items-center justify-center h-full p-6 bg-gray-50 dark:bg-secondary rounded-lg shadow-inner text-gray-500 dark:text-gray-400">
@@ -198,26 +250,110 @@ export const CertificateExtractor: React.FC = () => {
                                 <th scope="col" className="px-6 py-3">Course Title</th>
                                 <th scope="col" className="px-6 py-3">Issuing Authority</th>
                                 <th scope="col" className="px-6 py-3">Issue Date</th>
+                                <th scope="col" className="px-6 py-3">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {allCertificates.length > 0 ? allCertificates.map((cert, index) => (
-                                <tr key={index} className="border-b dark:border-gray-700">
+                                <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-secondary-light">
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{cert.recipientName}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{cert.certificateId}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{cert.courseTitle}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{cert.issuingAuthority}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{cert.issueDate}</td>
+                                    <td className="px-6 py-4">
+                                        <button
+                                            onClick={() => setSelectedCertificate(cert)}
+                                            className="text-primary hover:text-primary-dark font-semibold hover:underline"
+                                        >
+                                            View
+                                        </button>
+                                    </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={5} className="text-center py-8 text-gray-500 dark:text-gray-400">No certificates added to the list.</td>
+                                    <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-gray-400">No certificates added to the list.</td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            {/* Certificate Modal */}
+            {selectedCertificate && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={closeCertificateModal}
+                >
+                    <div 
+                        className="bg-white dark:bg-secondary rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="sticky top-0 bg-white dark:bg-secondary border-b dark:border-gray-700 p-4 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-text-light dark:text-text-dark">
+                                Certificate for {selectedCertificate.recipientName}
+                            </h3>
+                            <div className="flex items-center gap-3">
+                                {selectedCertificate.imageBase64 && (
+                                    <a
+                                        href={selectedCertificate.imageBase64}
+                                        download={`Certificate-${selectedCertificate.recipientName}.${selectedCertificate.mimeType.split('/')[1] || 'file'}`}
+                                        className="px-3 py-1 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded transition-colors duration-200"
+                                    >
+                                        Download
+                                    </a>
+                                )}
+                                <button
+                                    onClick={closeCertificateModal}
+                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl font-bold"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-6">
+                            {selectedCertificate.imageBase64 && (
+                                <div className="mb-6">
+                                    {selectedCertificate.mimeType === 'application/pdf' ? (
+                                        <div className="w-full h-[600px] border rounded-lg overflow-hidden">
+                                            <iframe
+                                                src={selectedCertificate.imageBase64}
+                                                className="w-full h-full"
+                                                title={`Certificate for ${selectedCertificate.recipientName}`}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <img 
+                                            src={selectedCertificate.imageBase64}
+                                            alt={`Certificate for ${selectedCertificate.recipientName}`}
+                                            className="w-full rounded-lg shadow-md"
+                                        />
+                                    )}
+                                </div>
+                            )}
+                            
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {(Object.keys(selectedCertificate) as Array<keyof CertificateExportItem>).map((key) => {
+                                        if (key === 'imageBase64' || key === 'mimeType') return null;
+                                        const value = selectedCertificate[key];
+                                        return (
+                                            <div key={key}>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 capitalize">
+                                                    {key.replace(/([A-Z])/g, ' $1')}
+                                                </label>
+                                                <p className="text-text-light dark:text-text-dark">{value || 'N/A'}</p>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

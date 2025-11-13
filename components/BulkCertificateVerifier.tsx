@@ -1,17 +1,17 @@
-
 import React, { useState, useCallback } from 'react';
 import { extractCertificateInfo } from '../services/geminiService';
 import { VerificationResult } from '../types';
 import { UploadIcon, DownloadIcon, SparklesIcon } from './icons';
 
-const fileToBase64 = (file: File): Promise<string> => {
+const fileToBase64 = (file: File): Promise<{base64: string, mimeType: string}> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
             const result = reader.result as string;
-            // Return just the base64 part, remove the prefix e.g. "data:image/png;base64,"
-            resolve(result.split(',')[1]);
+            const [header, base64] = result.split(',');
+            const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+            resolve({ base64, mimeType });
         };
         reader.onerror = error => reject(error);
     });
@@ -22,6 +22,7 @@ export const BulkCertificateVerifier: React.FC = () => {
     const [results, setResults] = useState<VerificationResult[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedCertificate, setSelectedCertificate] = useState<VerificationResult | null>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFiles(e.target.files);
@@ -37,23 +38,33 @@ export const BulkCertificateVerifier: React.FC = () => {
         setIsLoading(true);
         setError(null);
         
-        // Fix: Add type annotation for the 'file' parameter to resolve type errors.
         const verificationPromises = Array.from(files).map(async (file: File) => {
             try {
-                const [data, imageBase64] = await Promise.all([
+                const [data, fileData] = await Promise.all([
                     extractCertificateInfo(file),
                     fileToBase64(file),
                 ]);
-                return { fileName: file.name, data, status: 'Verified', imageBase64 } as VerificationResult;
+                return { 
+                    fileName: file.name, 
+                    data, 
+                    status: 'Verified', 
+                    imageBase64: fileData.base64,
+                    mimeType: fileData.mimeType 
+                } as VerificationResult;
             } catch (err: any) {
                 console.error(`Failed to process ${file.name}:`, err);
-                // Try to get base64 even on failure for export
-                const imageBase64 = await fileToBase64(file).catch(() => '');
-                return { fileName: file.name, data: null, status: 'Failed', error: err.message || 'Unknown error', imageBase64 } as VerificationResult;
+                const fileData = await fileToBase64(file).catch(() => ({ base64: '', mimeType: 'image/png' }));
+                return { 
+                    fileName: file.name, 
+                    data: null, 
+                    status: 'Failed', 
+                    error: err.message || 'Unknown error', 
+                    imageBase64: fileData.base64,
+                    mimeType: fileData.mimeType
+                } as VerificationResult;
             }
         });
 
-        // This allows results to stream in as they complete
         setResults([]);
         for (const promise of verificationPromises) {
             promise.then(result => {
@@ -114,6 +125,10 @@ export const BulkCertificateVerifier: React.FC = () => {
         }
     };
 
+    const closeCertificateModal = () => {
+        setSelectedCertificate(null);
+    };
+
     return (
         <div>
             <div className="p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-center bg-white dark:bg-secondary mb-6">
@@ -158,6 +173,7 @@ export const BulkCertificateVerifier: React.FC = () => {
                                 <th scope="col" className="px-6 py-3">Recipient</th>
                                 <th scope="col" className="px-6 py-3">Course</th>
                                 <th scope="col" className="px-6 py-3">Issue Date</th>
+                                <th scope="col" className="px-6 py-3">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -172,16 +188,134 @@ export const BulkCertificateVerifier: React.FC = () => {
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{res.data?.recipientName || 'N/A'}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{res.data?.courseTitle || 'N/A'}</td>
                                     <td className="px-6 py-4 text-text-light dark:text-text-dark">{res.data?.issueDate || 'N/A'}</td>
+                                    <td className="px-6 py-4">
+                                        <button
+                                            onClick={() => setSelectedCertificate(res)}
+                                            className="text-primary hover:text-primary-dark font-semibold hover:underline"
+                                        >
+                                            View
+                                        </button>
+                                    </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={5} className="text-center py-8 text-gray-500 dark:text-gray-400">No results yet. Upload and verify certificates to see them here.</td>
+                                    <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-gray-400">No results yet. Upload and verify certificates to see them here.</td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            {/* Certificate Modal */}
+            {selectedCertificate && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={closeCertificateModal}
+                >
+                    <div 
+                        className="bg-white dark:bg-secondary rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="sticky top-0 bg-white dark:bg-secondary border-b dark:border-gray-700 p-4 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-text-light dark:text-text-dark">
+                                {selectedCertificate.fileName}
+                            </h3>
+                            <div className="flex items-center gap-3">
+                                {selectedCertificate.imageBase64 && (
+                                    <a
+                                        href={`data:${selectedCertificate.mimeType || 'image/png'};base64,${selectedCertificate.imageBase64}`}
+                                        download={selectedCertificate.fileName}
+                                        className="px-3 py-1 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded transition-colors duration-200"
+                                    >
+                                        Download
+                                    </a>
+                                )}
+                                <button
+                                    onClick={closeCertificateModal}
+                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl font-bold"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-6">
+                            {selectedCertificate.imageBase64 && (
+                                <div className="mb-6">
+                                    {selectedCertificate.mimeType === 'application/pdf' ? (
+                                        <div className="w-full h-[600px] border rounded-lg overflow-hidden">
+                                            <iframe
+                                                src={`data:application/pdf;base64,${selectedCertificate.imageBase64}`}
+                                                className="w-full h-full"
+                                                title={selectedCertificate.fileName}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <img 
+                                            src={`data:${selectedCertificate.mimeType || 'image/png'};base64,${selectedCertificate.imageBase64}`} 
+                                            alt={selectedCertificate.fileName}
+                                            className="w-full rounded-lg shadow-md"
+                                            onError={(e) => {
+                                                console.error('Image failed to load');
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement!.innerHTML = '<p class="text-red-500 text-center py-4">Unable to display image. The file format may not be supported for preview.</p>';
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                            )}
+                            
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                                        <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${selectedCertificate.status === 'Verified' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'}`}>
+                                            {selectedCertificate.status}
+                                        </span>
+                                    </div>
+                                    
+                                    {selectedCertificate.data && (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Name</label>
+                                                <p className="text-text-light dark:text-text-dark">{selectedCertificate.data.recipientName || 'N/A'}</p>
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Certificate ID</label>
+                                                <p className="text-text-light dark:text-text-dark">{selectedCertificate.data.certificateId || 'N/A'}</p>
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Course Title</label>
+                                                <p className="text-text-light dark:text-text-dark">{selectedCertificate.data.courseTitle || 'N/A'}</p>
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Issuing Authority</label>
+                                                <p className="text-text-light dark:text-text-dark">{selectedCertificate.data.issuingAuthority || 'N/A'}</p>
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Issue Date</label>
+                                                <p className="text-text-light dark:text-text-dark">{selectedCertificate.data.issueDate || 'N/A'}</p>
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    {selectedCertificate.error && (
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-red-700 dark:text-red-400 mb-1">Error</label>
+                                            <p className="text-red-600 dark:text-red-400">{selectedCertificate.error}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

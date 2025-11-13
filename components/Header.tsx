@@ -1,13 +1,13 @@
 import React from 'react';
 import { SunIcon, MoonIcon, SparklesIcon, LogoutIcon } from './icons';
-import { UserRole } from '../types';
+import { User } from '../types';
 
 interface HeaderProps {
   onLogout: () => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   children: React.ReactNode;
-  userRole: UserRole;
+  user: User;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,7 +15,7 @@ export const Header: React.FC<HeaderProps> = ({
   isDarkMode,
   toggleDarkMode,
   children,
-  userRole
+  user
 }) => {
   return (
     <header className="sticky top-0 z-10 bg-white/80 dark:bg-secondary/80 backdrop-blur-sm shadow-md">
@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
             <SparklesIcon className="h-8 w-8 text-primary" />
             <div className="flex flex-col">
               <h1 className="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">RepoCerti</h1>
-              <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{userRole} Dashboard</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Welcome, {user.username}</span>
             </div>
           </div>
 

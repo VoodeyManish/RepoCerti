@@ -1,17 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { LoginPage } from './components/LoginPage';
+import { AuthPage } from './components/AuthPage';
 import { StudentDashboard } from './components/StudentDashboard';
 import { StaffDashboard } from './components/StaffDashboard';
-import { UserRole } from './types';
+import { User } from './types';
+import { getCurrentUser, logoutUser } from './services/authService';
 
 const App: React.FC = () => {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     return false;
   });
+
+  useEffect(() => {
+    // Check for a logged-in user on initial load
+    const user = getCurrentUser();
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -25,30 +34,32 @@ const App: React.FC = () => {
     setIsDarkMode(prev => !prev);
   };
 
-  const handleLogin = (role: UserRole) => {
-    setUserRole(role);
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
   };
 
   const handleLogout = () => {
-    setUserRole(null);
+    logoutUser();
+    setCurrentUser(null);
   };
 
   const renderContent = () => {
-    if (!userRole) {
-      return <LoginPage onLogin={handleLogin} />;
+    if (!currentUser) {
+      return <AuthPage onLoginSuccess={handleLoginSuccess} />;
     }
     
     const commonProps = {
       isDarkMode,
       toggleDarkMode,
       onLogout: handleLogout,
+      user: currentUser,
     };
     
-    if (userRole === 'student') {
+    if (currentUser.role === 'student') {
       return <StudentDashboard {...commonProps} />;
     }
     
-    if (userRole === 'staff') {
+    if (currentUser.role === 'staff') {
       return <StaffDashboard {...commonProps} />;
     }
     

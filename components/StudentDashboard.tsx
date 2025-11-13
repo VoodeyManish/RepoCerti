@@ -2,21 +2,22 @@ import React, { useState } from 'react';
 import { Header, NavButton } from './Header';
 import { ReportGenerator } from './ReportGenerator';
 import { CertificateExtractor } from './CertificateExtractor';
-import { ActiveModule } from '../types';
+import { ActiveModule, User } from '../types';
 
 interface StudentDashboardProps {
   onLogout: () => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  user: User;
 }
 
-export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onLogout, isDarkMode, toggleDarkMode }) => {
+export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onLogout, isDarkMode, toggleDarkMode, user }) => {
   const [activeModule, setActiveModule] = useState<ActiveModule>(ActiveModule.Report);
 
   return (
     <>
       <Header 
-        userRole="student"
+        user={user}
         onLogout={onLogout}
         isDarkMode={isDarkMode}
         toggleDarkMode={toggleDarkMode}
