@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { extractCertificateInfo } from '../services/geminiService';
 import { CertificateData } from '../types';
@@ -12,11 +13,9 @@ interface CertificateExportItem extends CertificateData {
 export const CertificateExtractor: React.FC = () => {
     const [file, setFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [extractedData, setExtractedData] = useState<CertificateData | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [allCertificates, setAllCertificates] = useState<CertificateExportItem[]>([]);
-    const [isAddingToList, setIsAddingToList] = useState<boolean>(false);
     const [selectedCertificate, setSelectedCertificate] = useState<CertificateExportItem | null>(null);
 
 
@@ -37,41 +36,12 @@ export const CertificateExtractor: React.FC = () => {
 
         if (selectedFile) {
             setFile(selectedFile);
-            setExtractedData(null);
             setError(null);
             const objectUrl = URL.createObjectURL(selectedFile);
             setPreviewUrl(objectUrl);
         } else {
             setFile(null);
             setPreviewUrl(null);
-        }
-    };
-
-    const handleExtract = useCallback(async () => {
-        if (!file) {
-            setError('Please select a file first.');
-            return;
-        }
-        setIsLoading(true);
-        setError(null);
-        setExtractedData(null);
-        try {
-            const data = await extractCertificateInfo(file);
-            setExtractedData(data);
-        } catch (err) {
-            setError('Failed to extract information. The image might be unclear or the format unsupported. Please try again.');
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [file]);
-
-    const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (extractedData) {
-            setExtractedData({
-                ...extractedData,
-                [e.target.name]: e.target.value,
-            });
         }
     };
 
@@ -84,29 +54,31 @@ export const CertificateExtractor: React.FC = () => {
         });
     };
 
-    const addToList = async () => {
-        if (extractedData && file) {
-            setIsAddingToList(true);
-            try {
-                const dataUrl = await fileToDataUrl(file);
-                // Add mimeType for the modal viewer functionality
-                setAllCertificates(prev => [...prev, { ...extractedData, imageBase64: dataUrl, mimeType: file.type }]);
-                
-                setExtractedData(null);
-                setFile(null);
-                if (previewUrl) {
-                    URL.revokeObjectURL(previewUrl);
-                }
-                setPreviewUrl(null);
-
-            } catch (err) {
-                setError('Could not process file for the export list.');
-                console.error(err);
-            } finally {
-                setIsAddingToList(false);
-            }
+    const handleExtract = useCallback(async () => {
+        if (!file) {
+            setError('Please select a file first.');
+            return;
         }
-    };
+        setIsLoading(true);
+        setError(null);
+        try {
+            const data = await extractCertificateInfo(file);
+            const dataUrl = await fileToDataUrl(file);
+            setAllCertificates(prev => [...prev, { ...data, imageBase64: dataUrl, mimeType: file.type }]);
+            
+            // Reset file input
+            setFile(null);
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+            }
+            setPreviewUrl(null);
+        } catch (err) {
+            setError('Failed to extract information. The image might be unclear or the format unsupported. Please try again.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [file, previewUrl]);
 
     const exportToExcel = () => {
         if (allCertificates.length === 0) return;
@@ -162,71 +134,40 @@ export const CertificateExtractor: React.FC = () => {
 
     return (
         <div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div>
-                    <h2 className="text-2xl font-bold mb-4">Upload Certificate</h2>
-                    <div className="p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-center bg-white dark:bg-secondary">
-                        <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept="image/*,application/pdf" />
-                        <label htmlFor="file-upload" className="cursor-pointer">
-                            <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
-                            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                                {file ? `Selected: ${file.name}` : 'Click to upload an image or PDF'}
-                            </p>
-                        </label>
+            <div className="max-w-2xl mx-auto">
+                <h2 className="text-2xl font-bold mb-4 text-center">Upload Certificate</h2>
+                <div className="p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-center bg-white dark:bg-secondary">
+                    <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept="image/*,application/pdf" />
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                        <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
+                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                            {file ? `Selected: ${file.name}` : 'Click to upload an image or PDF'}
+                        </p>
+                    </label>
+                </div>
+                {previewUrl && file && (
+                    <div className="mt-4">
+                        <h3 className="font-semibold text-center">Preview:</h3>
+                        {file.type.startsWith('image/') ? (
+                            <img src={previewUrl} alt="Certificate Preview" className="mt-2 rounded-lg shadow-md max-h-96 w-auto mx-auto" />
+                        ) : file.type === 'application/pdf' ? (
+                            <iframe src={previewUrl} title="Certificate Preview" className="mt-2 w-full h-96 rounded-lg shadow-md border-0" />
+                        ) : (
+                            <div className="mt-2 text-center p-4 rounded-lg bg-gray-100 dark:bg-secondary-light text-gray-500 dark:text-gray-400">
+                                <p>Preview not available for this file type ({file.type}).</p>
+                            </div>
+                        )}
                     </div>
-                    {previewUrl && file && (
-                        <div className="mt-4">
-                            <h3 className="font-semibold">Preview:</h3>
-                            {file.type.startsWith('image/') ? (
-                                <img src={previewUrl} alt="Certificate Preview" className="mt-2 rounded-lg shadow-md max-h-96 w-auto mx-auto" />
-                            ) : file.type === 'application/pdf' ? (
-                                <iframe src={previewUrl} title="Certificate Preview" className="mt-2 w-full h-96 rounded-lg shadow-md border-0" />
-                            ) : (
-                                <div className="mt-2 text-center p-4 rounded-lg bg-gray-100 dark:bg-secondary-light text-gray-500 dark:text-gray-400">
-                                    <p>Preview not available for this file type ({file.type}).</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    <button
-                        onClick={handleExtract}
-                        disabled={!file || isLoading}
-                        className="mt-6 w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-md transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-light focus:ring-offset-2 dark:focus:ring-offset-background-dark"
-                    >
-                        <SparklesIcon className="w-6 h-6" />
-                        {isLoading ? 'Extracting Data...' : 'Extract with AI'}
-                    </button>
-                    {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
-                </div>
-
-                <div>
-                    <h2 className="text-2xl font-bold mb-4">Extracted Information</h2>
-                    {extractedData ? (
-                        <div className="space-y-4 p-6 bg-white dark:bg-secondary rounded-lg shadow-md">
-                            {(Object.keys(extractedData) as Array<keyof CertificateData>).map((key) => (
-                                key !== 'imageBase64' &&
-                                <div key={key}>
-                                    <label htmlFor={key} className="block text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
-                                    <input
-                                        type="text"
-                                        id={key}
-                                        name={key}
-                                        value={extractedData[key as keyof Omit<CertificateData, 'imageBase64'>]}
-                                        onChange={handleDataChange}
-                                        className="mt-1 block w-full p-2 border rounded-md bg-gray-50 dark:bg-secondary-light dark:border-gray-600 focus:ring-primary focus:border-primary"
-                                    />
-                                </div>
-                            ))}
-                            <button onClick={addToList} disabled={isAddingToList} className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                                {isAddingToList ? 'Adding...' : 'Add to Export List'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-full p-6 bg-gray-50 dark:bg-secondary rounded-lg shadow-inner text-gray-500 dark:text-gray-400">
-                            <p>Data will appear here after extraction.</p>
-                        </div>
-                    )}
-                </div>
+                )}
+                <button
+                    onClick={handleExtract}
+                    disabled={!file || isLoading}
+                    className="mt-6 w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-md transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-light focus:ring-offset-2 dark:focus:ring-offset-background-dark"
+                >
+                    <SparklesIcon className="w-6 h-6" />
+                    {isLoading ? 'Extracting & Adding...' : 'Extract & Add to List'}
+                </button>
+                {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
             </div>
 
             <div className="mt-12">

@@ -25,11 +25,21 @@ const fileToGenerativePart = async (file: File) => {
     };
 };
 
-export const generateReportSection = async (topic: string): Promise<string> => {
+export const generateReportSection = async (topic: string, structure?: string): Promise<string> => {
     try {
+        let prompt = `Generate a professional, well-structured report about the following topic: "${topic}".`;
+        
+        if (structure) {
+            prompt += `\n\nPlease strictly follow this structure/outline for the headings and sections:\n${structure}`;
+        } else {
+            prompt += `\nThe section should be detailed, insightful, and ready for inclusion in a business or academic document.`;
+        }
+        
+        prompt += `\n\nUse Markdown formatting for headings (e.g., #, ##, ###). Do not include typical markdown code block syntax (\`\`\`markdown ... \`\`\`). Just return the raw formatted text.`;
+
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-pro',
-            contents: `Generate a professional, well-structured report section about the following topic: "${topic}". The section should be detailed, insightful, and ready for inclusion in a business or academic document.`,
+            contents: prompt,
             config: {
                 temperature: 0.7,
                 topP: 0.95,

@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { Header, NavButton } from './Header';
 import { ReportGenerator } from './ReportGenerator';
 import { BulkCertificateVerifier } from './BulkCertificateVerifier';
+import { FileRepository } from './FileRepository';
 import { StaffModule, User } from '../types';
 
 interface StaffDashboardProps {
@@ -34,10 +36,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, isDark
         >
             Report Generator
         </NavButton>
+        <NavButton
+            isActive={activeModule === StaffModule.Repository}
+            onClick={() => setActiveModule(StaffModule.Repository)}
+        >
+            File Repository
+        </NavButton>
       </Header>
       <main className="p-4 sm:p-6 md:p-8">
         {activeModule === StaffModule.BulkVerify && <BulkCertificateVerifier />}
         {activeModule === StaffModule.Report && <ReportGenerator />}
+        {activeModule === StaffModule.Repository && <FileRepository />}
       </main>
     </>
   );

@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { SparklesIcon } from './icons';
-import { User, UserRole } from '../types';
+import { User, UserRole, StaffDesignation } from '../types';
 import { loginUser, registerUser } from '../services/authService';
 
 interface AuthPageProps {
@@ -17,12 +18,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     const [password, setPassword] = useState('');
     const [username, setUsername] = useState('');
     const [role, setRole] = useState<UserRole>('student');
+    const [designation, setDesignation] = useState<StaffDesignation>('hod');
 
     const resetForm = () => {
         setEmail('');
         setPassword('');
         setUsername('');
         setRole('student');
+        setDesignation('hod');
         setError(null);
     };
 
@@ -44,7 +47,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                 if (!username) {
                   throw new Error("Username is required for signup.");
                 }
-                user = registerUser(username, email, password, role);
+                const finalDesignation = role === 'staff' ? designation : undefined;
+                user = registerUser(username, email, password, role, finalDesignation);
             }
             onLoginSuccess(user);
         } catch (err: any) {
@@ -125,6 +129,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                                     <span className="ml-2 text-text-light dark:text-text-dark">Staff</span>
                                 </label>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Staff Designation Selection */}
+                    {!isLoginView && role === 'staff' && (
+                        <div className="animate-fadeIn">
+                            <label className="block text-sm font-medium text-left text-gray-700 dark:text-gray-300">Designation</label>
+                            <select
+                                value={designation || 'hod'}
+                                onChange={(e) => setDesignation(e.target.value as StaffDesignation)}
+                                className="mt-1 block w-full px-3 py-2 border rounded-md bg-gray-50 dark:bg-secondary-light dark:border-gray-600 focus:ring-primary focus:border-primary"
+                            >
+                                <option value="hod">HOD (Head of Department)</option>
+                                <option value="dean">Dean</option>
+                                <option value="principal">Principal</option>
+                            </select>
                         </div>
                     )}
 

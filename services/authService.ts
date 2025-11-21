@@ -1,58 +1,38 @@
-import { User, UserRole } from '../types';
 
-const USERS_KEY = 'repocerti_users';
+import { User, UserRole, StaffDesignation } from '../types';
+import { dbCreateUser, dbGetUserByEmail } from './databaseService';
+
 const SESSION_KEY = 'repocerti_session';
-
-// --- Helper Functions ---
-
-/**
- * Retrieves all users from localStorage.
- * In a real application, this would be a database call.
- */
-const getUsers = (): User[] => {
-    try {
-        const usersJson = localStorage.getItem(USERS_KEY);
-        return usersJson ? JSON.parse(usersJson) : [];
-    } catch (e) {
-        console.error("Failed to parse users from localStorage", e);
-        return [];
-    }
-};
-
-/**
- * Saves the users array to localStorage.
- */
-const saveUsers = (users: User[]) => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-};
 
 // --- Public API ---
 
 /**
  * Registers a new user.
- * This simulates creating a new user record in a database.
- * @throws {Error} if email is already in use.
  */
-export const registerUser = (username: string, email: string, password_DO_NOT_STORE_PLAINTEXT: string, role: UserRole): User => {
-    const users = getUsers();
+export const registerUser = (
+    username: string, 
+    email: string, 
+    password_DO_NOT_STORE_PLAINTEXT: string, 
+    role: UserRole,
+    designation?: StaffDesignation
+): User => {
+    
     const normalizedEmail = email.toLowerCase();
 
-    if (users.some(user => user.email === normalizedEmail)) {
-        throw new Error('An account with this email already exists.');
-    }
-    
-    // In a real application, NEVER store plaintext passwords.
-    // Always hash and salt passwords on the server.
     const newUser: User = {
-        id: new Date().toISOString() + Math.random(),
+        id: Date.now().toString(),
         username,
         email: normalizedEmail,
         password_DO_NOT_STORE_PLAINTEXT,
         role,
+        designation: role === 'staff' ? designation : undefined
     };
 
-    users.push(newUser);
-    saveUsers(users);
+    try {
+        dbCreateUser(newUser);
+    } catch (e: any) {
+        throw new Error(e.message || 'Registration failed');
+    }
 
     // Automatically log the user in after registration
     localStorage.setItem(SESSION_KEY, JSON.stringify(newUser));
@@ -61,15 +41,11 @@ export const registerUser = (username: string, email: string, password_DO_NOT_ST
 };
 
 /**
- * Logs a user in by checking their credentials.
- * This simulates server-side credential validation.
- * @throws {Error} if credentials are invalid.
+ * Logs a user in.
  */
 export const loginUser = (email: string, password_DO_NOT_STORE_PLAINTEXT: string): User => {
-    const users = getUsers();
     const normalizedEmail = email.toLowerCase();
-    
-    const user = users.find(u => u.email === normalizedEmail);
+    const user = dbGetUserByEmail(normalizedEmail);
 
     // In a real app, you would compare password hashes here.
     if (user && user.password_DO_NOT_STORE_PLAINTEXT === password_DO_NOT_STORE_PLAINTEXT) {
@@ -81,7 +57,7 @@ export const loginUser = (email: string, password_DO_NOT_STORE_PLAINTEXT: string
 };
 
 /**
- * Logs the current user out by clearing their session.
+ * Logs the current user out.
  */
 export const logoutUser = (): void => {
     localStorage.removeItem(SESSION_KEY);
@@ -89,7 +65,6 @@ export const logoutUser = (): void => {
 
 /**
  * Retrieves the currently logged-in user from the session.
- * This is equivalent to checking a session token.
  */
 export const getCurrentUser = (): User | null => {
     try {

@@ -83,9 +83,23 @@ export const BulkCertificateVerifier: React.FC = () => {
         
         let tableHtml = `
             <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-            <head><meta charset='utf-8'><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-            <x:Name>Verification Results</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
-            </x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>
+            <head>
+                <meta charset='utf-8'>
+                <style>
+                    table { border-collapse: collapse; width: 100%; }
+                    th, td { border: 1px solid #000; padding: 10px; text-align: left; vertical-align: top; }
+                    th { background-color: #0d9488; color: white; font-weight: bold; font-size: 14px; }
+                    td { font-size: 12px; }
+                    img { max-width: 300px; height: auto; display: block; margin: 5px 0; cursor: pointer; }
+                    .pdf-notice { color: #0066cc; font-weight: bold; }
+                    .pdf-link { display: inline-block; padding: 8px 12px; background-color: #0d9488; color: white; text-decoration: none; border-radius: 4px; margin: 5px 0; }
+                    .pdf-link:hover { background-color: #0f766e; }
+                </style>
+                <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+                <x:Name>Verification Results</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+                </x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+            </head>
+            <body>
             <table>
                 <thead>
                     <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
@@ -94,7 +108,27 @@ export const BulkCertificateVerifier: React.FC = () => {
         `;
 
         results.forEach(res => {
-            const imageTag = res.imageBase64 ? `<img src="data:image/png;base64,${res.imageBase64}" width="200" alt="Certificate">` : 'N/A';
+            let certificateContent = 'N/A';
+            
+            if (res.imageBase64) {
+                if (res.mimeType === 'application/pdf') {
+                    // For PDFs, provide both a link and an embedded object
+                    certificateContent = `
+                        <div>
+                            <p class="pdf-notice">📄 PDF Certificate</p>
+                            <a href="data:application/pdf;base64,${res.imageBase64}" class="pdf-link" download="${res.fileName}">
+                                Click to View/Download PDF
+                            </a>
+                            <br/>
+                            <embed src="data:application/pdf;base64,${res.imageBase64}" type="application/pdf" width="300" height="400" />
+                        </div>
+                    `;
+                } else {
+                    // For images, embed directly
+                    certificateContent = `<img src="data:${res.mimeType || 'image/png'};base64,${res.imageBase64}" alt="Certificate" title="Click to open full size" onclick="window.open(this.src)" />`;
+                }
+            }
+            
             tableHtml += `
                 <tr>
                     <td>${res.fileName}</td>
@@ -105,7 +139,7 @@ export const BulkCertificateVerifier: React.FC = () => {
                     <td>${res.data?.issuingAuthority || ''}</td>
                     <td>${res.data?.issueDate || ''}</td>
                     <td>${res.error || ''}</td>
-                    <td>${imageTag}</td>
+                    <td>${certificateContent}</td>
                 </tr>
             `;
         });
@@ -217,14 +251,14 @@ export const BulkCertificateVerifier: React.FC = () => {
                         className="bg-white dark:bg-secondary rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="sticky top-0 bg-white dark:bg-secondary border-b dark:border-gray-700 p-4 flex justify-between items-center">
+                        <div className="sticky top-0 bg-white dark:bg-secondary border-b dark:border-gray-700 p-4 flex justify-between items-center z-10">
                             <h3 className="text-xl font-bold text-text-light dark:text-text-dark">
                                 {selectedCertificate.fileName}
                             </h3>
                             <div className="flex items-center gap-3">
                                 {selectedCertificate.imageBase64 && (
                                     <a
-                                        href={`data:${selectedCertificate.mimeType || 'image/png'};base64,${selectedCertificate.imageBase64}`}
+                                        href={`data:${selectedCertificate.mimeType || 'application/octet-stream'};base64,${selectedCertificate.imageBase64}`}
                                         download={selectedCertificate.fileName}
                                         className="px-3 py-1 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded transition-colors duration-200"
                                     >
@@ -244,11 +278,12 @@ export const BulkCertificateVerifier: React.FC = () => {
                             {selectedCertificate.imageBase64 && (
                                 <div className="mb-6">
                                     {selectedCertificate.mimeType === 'application/pdf' ? (
-                                        <div className="w-full h-[600px] border rounded-lg overflow-hidden">
+                                        <div className="w-full border rounded-lg overflow-hidden bg-gray-100">
                                             <iframe
                                                 src={`data:application/pdf;base64,${selectedCertificate.imageBase64}`}
-                                                className="w-full h-full"
+                                                className="w-full h-[600px]"
                                                 title={selectedCertificate.fileName}
+                                                style={{ border: 'none' }}
                                             />
                                         </div>
                                     ) : (
@@ -258,8 +293,12 @@ export const BulkCertificateVerifier: React.FC = () => {
                                             className="w-full rounded-lg shadow-md"
                                             onError={(e) => {
                                                 console.error('Image failed to load');
-                                                e.currentTarget.style.display = 'none';
-                                                e.currentTarget.parentElement!.innerHTML = '<p class="text-red-500 text-center py-4">Unable to display image. The file format may not be supported for preview.</p>';
+                                                const target = e.currentTarget;
+                                                target.style.display = 'none';
+                                                const errorDiv = document.createElement('div');
+                                                errorDiv.className = 'text-red-500 text-center py-4 bg-red-50 dark:bg-red-900/20 rounded-lg';
+                                                errorDiv.textContent = 'Unable to display this file format. Please use the download button above.';
+                                                target.parentElement?.appendChild(errorDiv);
                                             }}
                                         />
                                     )}
